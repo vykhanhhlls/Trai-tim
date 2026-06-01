@@ -2,117 +2,143 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Particles Pink Random - GitHub</title>
+<title>3D Pink Galaxy Particles</title>
 <style>
     body { margin: 0; overflow: hidden; background: #000; }
     canvas { display: block; }
+    #info {
+        position: absolute; top: 10px; left: 10px; color: #fff; font-family: Arial; 
+        pointer-events: none; z-index: 100;
+    }
 </style>
 </head>
 <body>
+<div id="info">Kéo chuột để xoay • Cuộn để zoom</div>
 
-<canvas id="canvas"></canvas>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
 <script>
 // Cấu hình
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+let scene, camera, renderer;
+let particles;
+const particleCount = 4000;
 
-let width, height;
-const particles = [];
-const particleCount = 2500;        // Số lượng chấm (càng nhiều càng đẹp)
-const colors = ['#ff69b4', '#ff1493', '#db7093', '#ffb6c1', '#ff00ff'];
-
-class Particle {
-    constructor() {
-        this.reset();
-    }
-
-    reset() {
-        this.x = width / 2 + (Math.random() - 0.5) * 400;
-        this.y = height / 2 + (Math.random() - 0.5) * 400;
-        
-        this.vx = (Math.random() - 0.5) * 1.5;
-        this.vy = (Math.random() - 0.5) * 1.5;
-        
-        this.size = Math.random() * 2.5 + 0.8;
-        this.alpha = Math.random() * 0.8 + 0.4;
-        this.color = colors[Math.floor(Math.random() * colors.length)];
-    }
-
-    update() {
-        this.x += this.vx;
-        this.y += this.vy;
-
-        // Rung ngẫu nhiên (random movement)
-        this.vx += (Math.random() - 0.5) * 0.15;
-        this.vy += (Math.random() - 0.5) * 0.15;
-
-        // Giới hạn tốc độ
-        this.vx = Math.max(Math.min(this.vx, 3), -3);
-        this.vy = Math.max(Math.min(this.vy, 3), -3);
-
-        // Bounce khi chạm viền
-        if (this.x < 0 || this.x > width) this.vx *= -0.95;
-        if (this.y < 0 || this.y > height) this.vy *= -0.95;
-
-        // Fade nhẹ
-        this.alpha = Math.max(0.3, this.alpha - 0.0005);
-    }
-
-    draw() {
-        ctx.save();
-        ctx.globalAlpha = this.alpha;
-        ctx.fillStyle = this.color;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = this.color;
-        
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    }
-}
-
-// Khởi tạo
 function init() {
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = width;
-    canvas.height = height;
+    // Scene
+    scene = new THREE.Scene();
 
-    particles.length = 0;
-    for (let i = 0; i < particleCount; i++) {
-        particles.push(new Particle());
+    // Camera
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.z = 800;
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // Particles
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+
+    const colorOptions = [
+        new THREE.Color("#ff69b4"),
+        new THREE.Color("#ff1493"),
+        new THREE.Color("#db7093"),
+        new THREE.Color("#ffb6c1")
+    ];
+
+    for (let i = 0; i < particleCount * 3; i += 3) {
+        // Vị trí ngẫu nhiên trong không gian 3D
+        const radius = 300 + Math.random() * 400;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+
+        positions[i]     = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i + 2] = radius * Math.cos(phi);
+
+        // Màu
+        const color = colorOptions[Math.floor(Math.random() * colorOptions.length)];
+        colors[i]     = color.r;
+        colors[i + 1] = color.g;
+        colors[i + 2] = color.b;
+
+        sizes[i/3] = Math.random() * 3.5 + 1.2;
     }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+        size: 4,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    // Animation variables
+    window.rotationSpeed = { x: 0.0005, y: 0.0008 };
+
+    // Mouse controls
+    let isDragging = false;
+    let previousMouseX = 0;
+    let previousMouseY = 0;
+
+    renderer.domElement.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        previousMouseX = e.clientX;
+        previousMouseY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        const deltaX = e.clientX - previousMouseX;
+        const deltaY = e.clientY - previousMouseY;
+
+        particles.rotation.y += deltaX * 0.005;
+        particles.rotation.x += deltaY * 0.005;
+
+        previousMouseX = e.clientX;
+        previousMouseY = e.clientY;
+    });
+
+    // Zoom with mouse wheel
+    window.addEventListener('wheel', (e) => {
+        camera.position.z += e.deltaY * 2;
+        camera.position.z = Math.max(200, Math.min(1500, camera.position.z));
+    });
+
+    // Resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 }
 
 // Animation loop
 function animate() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';  // Tạo hiệu ứng đuôi
-    ctx.fillRect(0, 0, width, height);
-
-    for (let p of particles) {
-        p.update();
-        p.draw();
-
-        // Reset particle khi ra ngoài quá xa
-        if (p.x < -100 || p.x > width + 100 || p.y < -100 || p.y > height + 100) {
-            p.reset();
-        }
-    }
-
     requestAnimationFrame(animate);
+
+    // Tự động xoay nhẹ
+    particles.rotation.y += 0.0003;
+    particles.rotation.x += 0.0001;
+
+    renderer.render(scene, camera);
 }
 
-// Resize window
-window.addEventListener('resize', () => {
-    init();
-});
-
-// Khởi chạy
 init();
 animate();
 </script>
-
 </body>
 </html>
